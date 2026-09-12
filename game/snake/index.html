@@ -9,9 +9,18 @@
 <body>
   <main class="game-wrapper">
     <h1 class="game-title">贪吃蛇</h1>
-    <canvas id="game-canvas" width="600" height="600" tabindex="0">
-      你的浏览器不支持 Canvas，请更换现代浏览器后再试。
-    </canvas>
+
+    <div class="hud">
+      <span class="hud-item">得分：<span class="hud-value" id="score-value">0</span></span>
+      <span class="hud-item">状态：<span class="hud-value" id="status-value">准备开始</span></span>
+    </div>
+
+    <div class="canvas-stage">
+      <canvas id="game-canvas" width="600" height="600" tabindex="0">
+        你的浏览器不支持 Canvas，请更换现代浏览器后再试。
+      </canvas>
+      <p class="game-hint" id="game-hint">可通过 WASD、方向键、下方按钮 开始/控制</p>
+    </div>
 
     <div class="controls" role="group" aria-label="方向控制">
       <button type="button" class="control-btn control-btn--up" data-direction="up" aria-label="向上">↑</button>

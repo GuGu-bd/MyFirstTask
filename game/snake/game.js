@@ -1,8 +1,10 @@
 /**
  * 贪吃蛇 - 入口文件
  *
- * 第二阶段：网格移动 + WASD / 方向键 / 屏幕按钮控制。
- * 食物、自身碰撞、分数、游戏结束与重开留到后续阶段实现。
+ * 第三阶段：食物与得分系统。
+ * Canvas 只负责绘制游戏内容（背景、网格、食物、蛇），
+ * 分数、状态与操作提示由 HTML 负责。
+ * 自身碰撞、边界结束、最高分与重开留到后续阶段实现。
  */
 (function () {
   "use strict";
@@ -17,12 +19,13 @@
   var MAX_FRAME_DELTA_MS = 1000;            // 超过该值时视为页面切到后台，丢弃这段时间
 
   var INITIAL_HEAD = { x: 12, y: 12 };      // 初始蛇头所在格子
-  var HINT_TEXT = "可通过 WASD、方向键、下方按钮 开始/控制";
-  var HINT_Y = (INITIAL_HEAD.y + 3) * CELL_SIZE;  // 提示文字绘制在蛇的下方
-  var HINT_PULSE_MS = 1600;                 // 渐显渐隐的一个完整周期
-  var HINT_MIN_ALPHA = 0.2;
-  var HINT_MAX_ALPHA = 1;
-  var HINT_FONT = '16px "Segoe UI", "Microsoft YaHei", Arial, sans-serif';
+  var FOOD_RADIUS_RATIO = 0.32;             // 食物半径相对格子尺寸的比例
+
+  // HUD 状态文案
+  var STATUS_TEXT = {
+    ready: "准备开始",
+    running: "进行中"
+  };
 
   // 颜色与后续替换贴图相关的配置集中在这里
   var COLORS = {
@@ -31,7 +34,7 @@
     snakeBody: "#34d399",
     snakeHead: "#86efac",
     snakeEye: "#0b1219",
-    hint: "#9fb3bd"
+    food: "#f87171"
   };
 
   // 四个方向对应的坐标增量（x 向右、y 向下）
@@ -70,8 +73,16 @@
     direction: "right",      // 当前生效方向
     pendingDirections: [],   // 待执行方向队列，每个 tick 消费一个
     snake: [],               // 蛇身坐标，索引 0 为蛇头
+    food: null,              // 食物坐标，无空格可用时为 null
+    foodEaten: 0,            // 已吃到的食物数量，用于计分
+    score: 0,                // 当前得分
     accumulator: 0,          // 移动节奏的时间累加器
-    lastFrameTime: null      // 上一帧时间戳
+    lastFrameTime: null,     // 上一帧时间戳
+    ui: {                    // HTML 层元素，缺失时只记录错误、不中断游戏
+      scoreElement: null,
+      statusElement: null,
+      hintElement: null
+    }
   };
 
   /**
@@ -86,6 +97,41 @@
   }
 
   /**
+   * 在空格中随机生成一个食物；蛇占满全屏时返回 null，避免死循环。
+   */
+  function createFood() {
+    var occupied = {};
+
+    for (var i = 0; i < game.snake.length; i++) {
+      occupied[game.snake[i].x + "," + game.snake[i].y] = true;
+    }
+
+    var candidates = [];
+
+    for (var y = 0; y < GRID_COUNT; y++) {
+      for (var x = 0; x < GRID_COUNT; x++) {
+        if (!occupied[x + "," + y]) {
+          candidates.push({ x: x, y: y });
+        }
+      }
+    }
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  /**
+   * 计分规则：第 n 个食物得 n 分。
+   * 后续要换成更复杂的算法时，只需修改这个函数。
+   */
+  function calculateFoodScore(eatenCount) {
+    return eatenCount;
+  }
+
+  /**
    * 重置到初始状态（本阶段只在初始化时调用）。
    */
   function resetGame() {
@@ -94,6 +140,52 @@
     game.pendingDirections = [];
     game.state = "ready";
     game.accumulator = 0;
+    game.foodEaten = 0;
+    game.score = 0;
+    game.food = createFood();
+    updateScoreDisplay();
+    updateStatusDisplay();
+    updateHintVisibility();
+  }
+
+  /**
+   * 统一切换游戏状态，并同步 HUD 文案与操作提示的显示。
+   */
+  function setState(nextState) {
+    if (game.state === nextState) {
+      return;
+    }
+
+    game.state = nextState;
+    updateStatusDisplay();
+    updateHintVisibility();
+  }
+
+  function updateScoreDisplay() {
+    if (game.ui.scoreElement) {
+      game.ui.scoreElement.textContent = String(game.score);
+    }
+  }
+
+  function updateStatusDisplay() {
+    if (game.ui.statusElement) {
+      game.ui.statusElement.textContent = STATUS_TEXT[game.state] || "";
+    }
+  }
+
+  /**
+   * 开始前显示操作提示，游戏开始后隐藏。
+   */
+  function updateHintVisibility() {
+    if (!game.ui.hintElement) {
+      return;
+    }
+
+    if (game.state === "ready") {
+      game.ui.hintElement.classList.remove("is-hidden");
+    } else {
+      game.ui.hintElement.classList.add("is-hidden");
+    }
   }
 
   /**
@@ -118,7 +210,7 @@
     // 与当前方向相同：运动中是重复按键，忽略；静止时直接开始移动
     if (directionName === baseDirection) {
       if (game.state === "ready") {
-        game.state = "running";
+        setState("running");
       }
       return;
     }
@@ -131,12 +223,14 @@
 
     // 首次合法输入才真正开始移动
     if (game.state === "ready") {
-      game.state = "running";
+      setState("running");
     }
   }
 
   /**
-   * 前进一格：消费一个待执行方向，生成新蛇头并移除蛇尾（本阶段蛇身不加长）。
+   * 前进一格：消费一个待执行方向，生成新蛇头。
+   * 吃到食物时蛇尾不弹出（蛇身 +1 节）并加分、重新生成食物；
+   * 否则头进尾出，长度保持不变。
    */
   function update() {
     if (game.pendingDirections.length > 0) {
@@ -155,8 +249,22 @@
       y: (head.y + delta.y + GRID_COUNT) % GRID_COUNT
     };
 
+    var ateFood = game.food !== null &&
+      newHead.x === game.food.x &&
+      newHead.y === game.food.y;
+
     game.snake.unshift(newHead);
-    game.snake.pop();
+
+    if (ateFood) {
+      game.foodEaten += 1;
+      game.score += calculateFoodScore(game.foodEaten);
+
+      // 基于增长后的蛇身重新生成食物，保证不会落在蛇身上
+      game.food = createFood();
+      updateScoreDisplay();
+    } else {
+      game.snake.pop();
+    }
   }
 
   /**
@@ -246,35 +354,32 @@
   }
 
   /**
-   * 绘制操作提示：位于蛇的下方，按周期渐显渐隐；游戏开始后不再绘制。
+   * 绘制食物：在格子中心画一个实心圆。
+   * 颜色与半径比例集中在常量区，后续可替换为贴图。
    */
-  function drawHint(timestamp) {
-    if (game.state !== "ready") {
+  function drawFood() {
+    if (!game.food) {
       return;
     }
 
     var ctx = game.ctx;
-    var phase = (timestamp % HINT_PULSE_MS) / HINT_PULSE_MS;
-    var wave = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
-    var alpha = HINT_MIN_ALPHA + (HINT_MAX_ALPHA - HINT_MIN_ALPHA) * wave;
+    var centerX = game.food.x * CELL_SIZE + CELL_SIZE / 2;
+    var centerY = game.food.y * CELL_SIZE + CELL_SIZE / 2;
+    var radius = CELL_SIZE * FOOD_RADIUS_RATIO;
 
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = COLORS.hint;
-    ctx.font = HINT_FONT;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(HINT_TEXT, CANVAS_WIDTH / 2, HINT_Y);
-    ctx.restore();
+    ctx.fillStyle = COLORS.food;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   /**
    * 统一绘制入口，后续新增食物、贴图时在此扩展。
    */
-  function draw(timestamp) {
+  function draw() {
     drawBoard();
+    drawFood();
     drawSnake();
-    drawHint(timestamp || 0);
   }
 
   /**
@@ -304,7 +409,7 @@
       game.accumulator = 0;
     }
 
-    draw(timestamp);
+    draw();
     window.requestAnimationFrame(loop);
   }
 
@@ -366,6 +471,12 @@
           direction: game.direction,
           head: { x: head.x, y: head.y },
           snakeLength: game.snake.length,
+          snake: game.snake.map(function (cell) {
+            return { x: cell.x, y: cell.y };
+          }),
+          food: game.food ? { x: game.food.x, y: game.food.y } : null,
+          foodEaten: game.foodEaten,
+          score: game.score,
           pendingDirections: game.pendingDirections.slice()
         };
       }
@@ -395,11 +506,18 @@
 
     game.canvas = canvas;
     game.ctx = ctx;
+    game.ui.scoreElement = document.getElementById("score-value");
+    game.ui.statusElement = document.getElementById("status-value");
+    game.ui.hintElement = document.getElementById("game-hint");
+
+    if (!game.ui.scoreElement || !game.ui.statusElement) {
+      console.error("[贪吃蛇] 未找到 HUD 元素（#score-value / #status-value）。");
+    }
 
     resetGame();
     bindEvents();
     exposeDebugApi();
-    draw(0);
+    draw();
     startLoop();
 
     console.log("[贪吃蛇] 初始化完成，等待方向输入。");
