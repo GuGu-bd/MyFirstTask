@@ -1,0 +1,51 @@
+/* ===== 基础重置 ===== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ===== 页面整体布局 ===== */
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+  color: #e8f1f2;
+  background: radial-gradient(circle at 50% 0%, #1f3b4d 0%, #16222c 45%, #0e1520 100%);
+}
+
+/* ===== 游戏容器 ===== */
+.game-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.game-title {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 4px;
+}
+
+/* ===== Canvas 居中显示 ===== */
+#game-canvas {
+  display: block;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 600px;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  background-color: #0b1219;
+  border: 2px solid #3d6b7d;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.game-tip {
+  font-size: 14px;
+  color: #9fb3bd;
+}
