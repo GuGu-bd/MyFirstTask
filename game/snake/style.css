@@ -45,7 +45,60 @@ body {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
-.game-tip {
-  font-size: 14px;
-  color: #9fb3bd;
+/* ===== 屏幕方向按钮 ===== */
+.controls {
+  display: grid;
+  grid-template-areas:
+    ". up ."
+    "left . right"
+    ". down .";
+  gap: 8px;
+  justify-content: center;
+}
+
+.control-btn {
+  width: 56px;
+  height: 56px;
+  border: 1px solid #3d6b7d;
+  border-radius: 10px;
+  background-color: #16222c;
+  color: #cfe6ee;
+  font-family: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.control-btn:hover {
+  background-color: #1f3b4d;
+  border-color: #4f8497;
+}
+
+.control-btn:active {
+  background-color: #2a4d60;
+  transform: translateY(1px);
+}
+
+.control-btn:focus-visible {
+  outline: 2px solid #86efac;
+  outline-offset: 2px;
+}
+
+.control-btn--up {
+  grid-area: up;
+}
+
+.control-btn--left {
+  grid-area: left;
+}
+
+.control-btn--down {
+  grid-area: down;
+}
+
+.control-btn--right {
+  grid-area: right;
 }

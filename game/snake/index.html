@@ -9,10 +9,17 @@
 <body>
   <main class="game-wrapper">
     <h1 class="game-title">贪吃蛇</h1>
-    <canvas id="game-canvas" width="600" height="600">
+    <canvas id="game-canvas" width="600" height="600" tabindex="0">
       你的浏览器不支持 Canvas，请更换现代浏览器后再试。
     </canvas>
-    <p class="game-tip">当前为基础结构版本，游戏逻辑尚未实现。</p>
+
+    <div class="controls" role="group" aria-label="方向控制">
+      <button type="button" class="control-btn control-btn--up" data-direction="up" aria-label="向上">↑</button>
+      <button type="button" class="control-btn control-btn--left" data-direction="left" aria-label="向左">←</button>
+      <button type="button" class="control-btn control-btn--down" data-direction="down" aria-label="向下">↓</button>
+      <button type="button" class="control-btn control-btn--right" data-direction="right" aria-label="向右">→</button>
+    </div>
+
   </main>
 
   <script src="game.js" defer></script>
