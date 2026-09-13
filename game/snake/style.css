@@ -53,6 +53,137 @@ body {
   letter-spacing: 1px;
 }
 
+.hud-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-progress {
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: #7dd3fc;
+}
+
+.ai-progress[hidden] {
+  display: none;
+}
+
+/* ===== AI 加速模式（按钮 + 悬停气泡） ===== */
+.speed-control {
+  position: relative;
+  display: inline-flex;
+}
+
+.speed-control[hidden] {
+  display: none;
+}
+
+/* 悬停桥接层：padding 覆盖按钮与气泡之间的空隙，
+   鼠标从按钮移向气泡时不会因为“什么都不悬停”而判定移出 */
+.speed-popover {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  z-index: 5;
+  padding-bottom: 12px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%);
+  /* 隐藏时延迟 0.3 秒，避免快速移动鼠标时气泡来不及操作就消失 */
+  transition: opacity 0.15s ease, visibility 0s linear 0.3s;
+}
+
+.speed-control:hover .speed-popover,
+.speed-control:focus-within .speed-popover {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.15s ease, visibility 0s linear 0s;
+}
+
+.speed-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 180px;
+  padding: 12px;
+  font-size: 12px;
+  border: 1px solid #3d6b7d;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #1a2a35 0%, #101a24 100%);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
+  transform: translateY(6px);
+  transition: transform 0.15s ease;
+}
+
+.speed-control:hover .speed-bubble,
+.speed-control:focus-within .speed-bubble {
+  transform: translateY(0);
+}
+
+.speed-bubble-title {
+  letter-spacing: 1px;
+  color: #7f939d;
+}
+
+.speed-bubble-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #7dd3fc;
+  text-align: right;
+}
+
+.speed-range {
+  width: 100%;
+  height: 22px;
+  accent-color: #34d399;
+  cursor: pointer;
+}
+
+/* 倍率刻度：1 / 5 / 10 按线性比例对齐滑块位置 */
+.speed-range-ticks {
+  position: relative;
+  height: 12px;
+  margin-top: -6px;
+}
+
+.speed-tick {
+  position: absolute;
+  top: 0;
+  font-size: 11px;
+  line-height: 1;
+  color: #7f939d;
+}
+
+.speed-tick--start {
+  left: 0;
+}
+
+.speed-tick--mid {
+  left: 44.44%;
+  transform: translateX(-50%);
+}
+
+.speed-tick--end {
+  right: 0;
+}
+
+#speed-btn.is-active {
+  font-weight: 600;
+  color: #06281d;
+  border-color: #34d399;
+  background-color: #34d399;
+  box-shadow: 0 6px 16px rgba(52, 211, 153, 0.25);
+}
+
+#speed-btn.is-active:hover:not(:disabled) {
+  background-color: #6ee7b7;
+  border-color: #6ee7b7;
+}
+
 .hud-value {
   font-weight: 600;
   color: #86efac;
@@ -216,7 +347,7 @@ body {
   display: grid;
   grid-template-areas:
     ". up ."
-    "left . right"
+    "left ai right"
     ". down .";
   gap: 8px;
   justify-content: center;
@@ -279,6 +410,38 @@ body {
 
 .control-btn--down {
   grid-area: down;
+}
+
+.control-btn--ai {
+  grid-area: ai;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #7dd3fc;
+  border-color: #3b6d85;
+}
+
+.control-btn--ai.is-active {
+  color: #06281d;
+  border-color: #34d399;
+  background-color: #34d399;
+  box-shadow: 0 6px 16px rgba(52, 211, 153, 0.28);
+}
+
+.control-btn--ai.is-active:hover {
+  background-color: #6ee7b7;
+  border-color: #6ee7b7;
+}
+
+/* 置灰时不被高亮样式覆盖 */
+.control-btn--ai:disabled,
+.control-btn--ai.is-active:disabled {
+  opacity: 0.4;
+  color: #7dd3fc;
+  border-color: #3d6b7d;
+  background-color: #16222c;
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 .control-btn--right {

@@ -16,7 +16,26 @@
         <span class="hud-item">长度 <span class="hud-value" id="length-value">3</span></span>
         <span class="hud-item">状态 <span class="hud-value" id="status-value">准备开始</span></span>
       </div>
-      <button type="button" class="ui-btn ui-btn--ghost" id="pause-btn" disabled>暂停</button>
+      <div class="hud-actions">
+        <span class="ai-progress" id="ai-progress" hidden>AI 进度 0 / 15</span>
+        <div class="speed-control" id="speed-control" hidden>
+          <button type="button" class="ui-btn ui-btn--ghost" id="speed-btn" aria-pressed="false" aria-haspopup="true">加速 x1</button>
+          <div class="speed-popover" id="speed-popover">
+            <div class="speed-bubble" id="speed-bubble" role="group" aria-label="加速倍率">
+              <span class="speed-bubble-title">加速倍率</span>
+              <input type="range" class="speed-range" id="speed-range" min="1" max="10" step="1" value="1" aria-label="AI 加速倍率">
+              <div class="speed-range-ticks" aria-hidden="true">
+                <span class="speed-tick speed-tick--start">1</span>
+                <span class="speed-tick speed-tick--mid">5</span>
+                <span class="speed-tick speed-tick--end">10</span>
+              </div>
+              <span class="speed-bubble-value" id="speed-value">1x</span>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="ui-btn ui-btn--primary" id="ai-start-btn">AI自动游玩</button>
+        <button type="button" class="ui-btn ui-btn--ghost" id="pause-btn" disabled>暂停</button>
+      </div>
     </div>
 
     <div class="canvas-stage">
@@ -45,19 +64,42 @@
           </div>
         </div>
       </div>
+
+      <div class="overlay" id="aiwin-overlay" hidden>
+        <div class="overlay-card">
+          <h2 class="overlay-title">AI 挑战成功</h2>
+          <p class="overlay-text">最终分数：<span class="overlay-score" id="aiwin-score">0</span></p>
+          <div class="overlay-actions">
+            <button type="button" class="ui-btn ui-btn--primary" id="ai-continue-btn">继续挑战</button>
+            <button type="button" class="ui-btn ui-btn--ghost" id="aiwin-restart-btn">重新开始</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay" id="aifail-overlay" hidden>
+        <div class="overlay-card">
+          <h2 class="overlay-title">AI 挑战失败</h2>
+          <p class="overlay-text">最终分数：<span class="overlay-score" id="aifail-score">0</span></p>
+          <div class="overlay-actions">
+            <button type="button" class="ui-btn ui-btn--primary" id="aifail-restart-btn">重新开始</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="controls" role="group" aria-label="方向控制">
       <button type="button" class="control-btn control-btn--up" data-direction="up" aria-label="向上">↑</button>
       <button type="button" class="control-btn control-btn--left" data-direction="left" aria-label="向左">←</button>
+      <button type="button" class="control-btn control-btn--ai" id="ai-toggle-btn" aria-pressed="false" disabled>AI</button>
       <button type="button" class="control-btn control-btn--down" data-direction="down" aria-label="向下">↓</button>
       <button type="button" class="control-btn control-btn--right" data-direction="right" aria-label="向右">→</button>
     </div>
 
-    <p class="controls-tip">空格键：暂停 / 继续</p>
+    <p class="controls-tip">空格键：暂停 / 继续 · AI 模式下由 AI 自动控制</p>
 
   </main>
 
+  <script src="ai.js" defer></script>
   <script src="game.js" defer></script>
 </body>
 </html>
