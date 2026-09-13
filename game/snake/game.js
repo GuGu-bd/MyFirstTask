@@ -1,7 +1,8 @@
 /**
  * 贪吃蛇 - 入口文件
  *
- * v2.1：在 v1.0 正式版基础上增加 AI 自动游玩（寻路算法见 ai.js）。
+ * v2.4：在 AI 自动游玩（寻路算法见 ai.js）基础上增加设置面板、
+ * 新记分制（得分 += 基础分值 × 长度）、最高分与多局战绩（localStorage）。
  * Canvas 只负责绘制游戏内容（背景、网格、食物、蛇），
  * 分数、长度、状态、按钮与遮罩卡片全部由 HTML 负责。
  */
@@ -23,6 +24,61 @@
   var INITIAL_HEAD = { x: 12, y: 12 };      // 初始蛇头所在格子
   var FOOD_RADIUS_RATIO = 0.32;             // 食物半径相对格子尺寸的比例
   var AI_GOAL = 15;                         // AI 挑战目标：连续吃满 15 个食物
+  var BASE_SCORE_VALUE = 10;                // 新记分制的基础分值：得分 += 基础分值 × 长度
+  var MAX_RECORDS = 10;                     // 多局战绩最多保留的局数
+  var STATS_STORAGE_KEY = "snake.stats.v1"; // 最高分与战绩的 localStorage 键名
+
+  // 画布上的操作提示文案
+  var READY_HINT_TEXT = "可通过 WASD、方向键、下方按钮 开始/控制";
+  var RESUME_HINT_TEXT = "移动以继续游戏";
+
+  // 主题：界面配色由 style.css 的 [data-theme] 变量负责，这里保存画布配色与浏览器主题色
+  var THEME_STORAGE_KEY = "snake.theme.v1";
+  var DEFAULT_THEME = "dark";
+  var THEMES = {
+    dark: {
+      metaColor: "#0b1219",
+      colorScheme: "dark",
+      canvas: {
+        boardBackground: "#0b1219",
+        gridLine: "rgba(255, 255, 255, 0.06)",
+        snakeBody: "#34d399",
+        snakeHead: "#86efac",
+        snakeTail: "#d1fae5",
+        snakeEye: "#0b1219",
+        food: "#f87171",
+        aiPath: "rgba(125, 211, 252, 0.65)"
+      }
+    },
+    light: {
+      metaColor: "#f7fafc",
+      colorScheme: "light",
+      canvas: {
+        boardBackground: "#f7fafc",
+        gridLine: "rgba(15, 23, 42, 0.07)",
+        snakeBody: "#059669",
+        snakeHead: "#047857",
+        snakeTail: "#34d399",
+        snakeEye: "#f7fafc",
+        food: "#dc2626",
+        aiPath: "rgba(2, 132, 199, 0.75)"
+      }
+    },
+    pink: {
+      metaColor: "#fff5fa",
+      colorScheme: "light",
+      canvas: {
+        boardBackground: "#fff5fa",
+        gridLine: "rgba(131, 24, 67, 0.08)",
+        snakeBody: "#db2777",
+        snakeHead: "#9d174d",
+        snakeTail: "#f472b6",
+        snakeEye: "#fff5fa",
+        food: "#ea580c",
+        aiPath: "rgba(124, 58, 237, 0.7)"
+      }
+    }
+  };
 
   // HUD 状态文案
   var STATUS_TEXT = {
@@ -40,16 +96,8 @@
   };
 
   // 颜色与后续替换贴图相关的配置集中在这里
-  var COLORS = {
-    boardBackground: "#0b1219",
-    gridLine: "rgba(255, 255, 255, 0.06)",
-    snakeBody: "#34d399",
-    snakeHead: "#86efac",
-    snakeTail: "#d1fae5",
-    snakeEye: "#0b1219",
-    food: "#f87171",
-    aiPath: "rgba(125, 211, 252, 0.65)"
-  };
+  // 画布配色：applyTheme() 会按当前主题整体替换
+  var COLORS = getThemeCanvasColors(DEFAULT_THEME);
 
   // 四个方向对应的坐标增量（x 向右、y 向下）
   var DIRECTIONS = {
@@ -84,6 +132,7 @@
     canvas: null,
     ctx: null,
     state: "ready",          // "ready" | "running" | "paused" | "over"
+    theme: DEFAULT_THEME,    // 当前主题：dark | light | pink
     direction: "right",      // 当前生效方向
     pendingDirections: [],   // 待执行方向队列，每个 tick 消费一个
     snake: [],               // 蛇身坐标，索引 0 为蛇头
@@ -99,18 +148,29 @@
     speedMultiplier: 1,      // AI 加速倍率（1 ~ 10），重新开始后保留
     speedBoost: false,       // AI 加速开关，重新开始后保留
     tickCount: 0,            // 累计执行的 tick 数，供调试与自动化验证
+    roundActive: false,      // 本局是否真正开始过（用于判断是否记战绩）
+    roundRecorded: false,    // 本局是否已经写入战绩，避免重复记录
+    roundUsedAi: false,      // 本局是否使用过 AI 模式
+    roundUsedPlayer: false,  // 本局是否出现过玩家方向操作
+    roundAiAchieved: false,  // 本局 AI 是否达成过 15 个食物的目标
+    deathReason: null,       // "wall" | "self"
     accumulator: 0,          // 移动节奏的时间累加器
     lastFrameTime: null,     // 上一帧时间戳
     ui: {                    // HTML 层元素，缺失时只记录错误、不中断游戏
       scoreElement: null,
+      highScoreElement: null,
+      roundElement: null,
       lengthElement: null,
       statusElement: null,
       hintElement: null,
-      pauseButton: null,
-      resumeButton: null,
-      pauseRestartButton: null,
+      settingsButton: null,
+      settingsPanel: null,
+      settingsCloseButton: null,
+      settingsPauseButton: null,
+      settingsRestartButton: null,
+      settingsRecordsButton: null,
+      settingsThemeButton: null,
       gameoverRestartButton: null,
-      pauseOverlay: null,
       gameoverOverlay: null,
       finalScoreElement: null,
       aiProgressElement: null,
@@ -123,10 +183,20 @@
       aiContinueButton: null,
       aiWinRestartButton: null,
       aiFailRestartButton: null,
-      speedControl: null,
-      speedButton: null,
+      speedSection: null,
+      speedSwitch: null,
       speedRange: null,
-      speedValueElement: null
+      speedValueElement: null,
+      recordsPanel: null,
+      recordsCloseButton: null,
+      recordsListElement: null,
+      bestRecordElement: null,
+      recordsResetButton: null,
+      resetConfirmElement: null,
+      resetConfirmButton: null,
+      resetCancelButton: null,
+      themePanel: null,
+      themeCloseButton: null
     }
   };
 
@@ -169,11 +239,472 @@
   }
 
   /**
-   * 计分规则：第 n 个食物得 n 分。
-   * 后续要换成更复杂的算法时，只需修改这个函数。
+   * 计分规则：得分 += 基础分值 × 吃到食物后的长度。
+   * 玩家模式与 AI 模式使用同一公式。
    */
-  function calculateFoodScore(eatenCount) {
-    return eatenCount;
+  function calculateFoodScore(length) {
+    return BASE_SCORE_VALUE * length;
+  }
+
+  // ===== 最高分与多局战绩（浏览器原生 localStorage） =====
+  var stats = createEmptyStats();
+
+  function createEmptyStats() {
+    return {
+      highScore: 0,
+      completedRounds: 0,
+      records: [],
+      bestRecord: null
+    };
+  }
+
+  function loadStats() {
+    var raw = null;
+
+    try {
+      raw = window.localStorage.getItem(STATS_STORAGE_KEY);
+    } catch (error) {
+      raw = null;
+    }
+
+    if (!raw) {
+      stats = createEmptyStats();
+      return;
+    }
+
+    try {
+      var parsed = JSON.parse(raw);
+
+      stats = {
+        highScore: Number(parsed.highScore) || 0,
+        completedRounds: Number(parsed.completedRounds) || 0,
+        records: Array.isArray(parsed.records) ? parsed.records.slice(0, MAX_RECORDS) : [],
+        bestRecord: parsed.bestRecord || null
+      };
+    } catch (error) {
+      stats = createEmptyStats();
+    }
+  }
+
+  function saveStats() {
+    try {
+      window.localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(stats));
+    } catch (error) {
+      console.warn("[贪吃蛇] 无法写入本地存储，最高分与战绩本次不会保留。");
+    }
+  }
+
+  /**
+   * 当前局编号：已记录局数 + 1，刷新页面后继续累加。
+   */
+  function getRoundNumber() {
+    return stats.completedRounds + 1;
+  }
+
+  // ===== 主题切换 =====
+
+  /**
+   * 取某个主题的画布配色副本；主题名非法时回退深色。
+   */
+  function getThemeCanvasColors(name) {
+    var theme = THEMES[name] ? name : DEFAULT_THEME;
+    var source = THEMES[theme].canvas;
+    var colors = {};
+
+    for (var key in source) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
+        colors[key] = source[key];
+      }
+    }
+
+    return colors;
+  }
+
+  /**
+   * 读取本地保存的原始主题值；读取失败返回 null。
+   */
+  function getRawSavedTheme() {
+    var saved = null;
+
+    try {
+      saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+    } catch (error) {
+      saved = null;
+    }
+
+    return saved;
+  }
+
+  function saveTheme(name) {
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, name);
+    } catch (error) {
+      console.warn("[贪吃蛇] 无法写入主题设置，刷新后会回到默认主题。");
+    }
+  }
+
+  /**
+   * 应用主题：界面配色由 style.css 根据 data-theme 切换，
+   * 这里同步画布配色、浏览器主题色与主题面板的选中态。
+   */
+  function applyTheme(name, options) {
+    var theme = THEMES[name] ? name : DEFAULT_THEME;
+    var config = THEMES[theme];
+
+    game.theme = theme;
+    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.style.colorScheme = config.colorScheme;
+
+    COLORS = getThemeCanvasColors(theme);
+
+    var meta = document.querySelector('meta[name="theme-color"]');
+
+    if (meta) {
+      meta.setAttribute("content", config.metaColor);
+    }
+
+    if (!options || options.persist !== false) {
+      saveTheme(theme);
+    }
+
+    updateThemeOptions();
+
+    // 画布逐帧重绘无法用 CSS 过渡，切换时做一次轻微淡入淡出
+    if (options && options.animate && game.canvas) {
+      game.canvas.classList.add("is-theme-fading");
+      window.setTimeout(function () {
+        game.canvas.classList.remove("is-theme-fading");
+      }, 200);
+    }
+  }
+
+  function loadTheme() {
+    var saved = getRawSavedTheme();
+    var theme = THEMES[saved] ? saved : DEFAULT_THEME;
+
+    applyTheme(theme, { persist: false });
+
+    // 没有设置或数据异常时，把存储规范化为默认深色
+    if (saved !== theme) {
+      saveTheme(theme);
+    }
+  }
+
+  /**
+   * 刷新主题卡片：当前主题显示“使用中”并高亮。
+   */
+  function updateThemeOptions() {
+    var options = document.querySelectorAll("[data-theme-option]");
+
+    for (var i = 0; i < options.length; i++) {
+      var isActive = options[i].getAttribute("data-theme-option") === game.theme;
+      var state = options[i].querySelector(".theme-option-state");
+
+      if (isActive) {
+        options[i].classList.add("is-active");
+      } else {
+        options[i].classList.remove("is-active");
+      }
+
+      if (state) {
+        state.hidden = !isActive;
+      }
+    }
+  }
+
+  function bindThemeOptions() {
+    var options = document.querySelectorAll("[data-theme-option]");
+
+    for (var i = 0; i < options.length; i++) {
+      (function (option) {
+        option.addEventListener("click", function () {
+          applyTheme(option.getAttribute("data-theme-option"), {
+            persist: true,
+            animate: true
+          });
+        });
+      })(options[i]);
+    }
+  }
+
+  /**
+   * 本局模式：只用过 AI → ai，只用过玩家操作 → player，两者都有 → mixed。
+   */
+  function getRoundMode() {
+    if (game.roundUsedAi && game.roundUsedPlayer) {
+      return "mixed";
+    }
+
+    if (game.roundUsedAi) {
+      return "ai";
+    }
+
+    return "player";
+  }
+
+  function getRoundModeText(mode) {
+    if (mode === "ai") {
+      return "完全AI";
+    }
+
+    if (mode === "mixed") {
+      return "混合模式";
+    }
+
+    return "玩家";
+  }
+
+  /**
+   * 本局结果：AI 达标过一律记“挑战成功”；完全AI 未达标记“挑战失败”；
+   * 其余情况按死因记撞墙/撞到自己，未死亡就手动重开记“重新开始”。
+   */
+  function getRoundResultText(manualRestart) {
+    if (game.roundAiAchieved) {
+      return "挑战成功";
+    }
+
+    if (getRoundMode() === "ai") {
+      return "挑战失败";
+    }
+
+    if (manualRestart) {
+      return "重新开始";
+    }
+
+    return game.deathReason === "self" ? "撞到自己" : "撞墙";
+  }
+
+  /**
+   * 记录本局战绩（每局只记录一次）。
+   */
+  function addRoundRecord(manualRestart) {
+    if (!game.roundActive || game.roundRecorded) {
+      return;
+    }
+
+    game.roundRecorded = true;
+
+    var record = {
+      round: getRoundNumber(),
+      mode: getRoundMode(),
+      score: game.score,
+      length: game.snake.length,
+      result: getRoundResultText(manualRestart),
+      time: Date.now()
+    };
+
+    stats.completedRounds += 1;
+    stats.records.unshift(record);
+
+    if (stats.records.length > MAX_RECORDS) {
+      stats.records = stats.records.slice(0, MAX_RECORDS);
+    }
+
+    if (!stats.bestRecord || record.score > stats.bestRecord.score) {
+      stats.bestRecord = record;
+    }
+
+    saveStats();
+    updateRoundDisplay();
+    renderRecords();
+  }
+
+  /**
+   * 加分并即时刷新最高分。
+   */
+  function applyScore(amount) {
+    game.score += amount;
+    updateScoreDisplay();
+
+    if (game.score > stats.highScore) {
+      stats.highScore = game.score;
+      saveStats();
+      updateHighScoreDisplay();
+    }
+  }
+
+  function updateHighScoreDisplay() {
+    if (game.ui.highScoreElement) {
+      game.ui.highScoreElement.textContent = String(stats.highScore);
+    }
+  }
+
+  function updateRoundDisplay() {
+    if (game.ui.roundElement) {
+      game.ui.roundElement.textContent = String(getRoundNumber());
+    }
+  }
+
+  function getResultClass(result) {
+    if (result === "挑战成功") {
+      return "record-result--success";
+    }
+
+    if (result === "挑战失败") {
+      return "record-result--failure";
+    }
+
+    return "record-result--neutral";
+  }
+
+  /**
+   * 生成一条战绩行。
+   */
+  function createRecordRow(record, isBest) {
+    var row = document.createElement("div");
+    row.className = "record-row" + (isBest ? " record-row--best" : "");
+
+    var main = document.createElement("div");
+    main.className = "record-main";
+
+    var title = document.createElement("span");
+    title.className = "record-title";
+    title.textContent = (isBest ? "最高分 · " : "") +
+      "#" + record.round + "  " + getRoundModeText(record.mode);
+
+    var meta = document.createElement("span");
+    meta.className = "record-meta";
+    meta.textContent = "得分 " + record.score + " · 长度 " + record.length;
+
+    main.appendChild(title);
+    main.appendChild(meta);
+
+    var result = document.createElement("span");
+    result.className = "record-result " + getResultClass(record.result);
+    result.textContent = record.result;
+
+    row.appendChild(main);
+    row.appendChild(result);
+
+    return row;
+  }
+
+  /**
+   * 渲染战绩面板：最高分局单独置顶，下面列出最近十局。
+   */
+  function renderRecords() {
+    var bestBox = game.ui.bestRecordElement;
+    var list = game.ui.recordsListElement;
+
+    if (bestBox) {
+      bestBox.innerHTML = "";
+
+      if (stats.bestRecord) {
+        bestBox.hidden = false;
+        bestBox.appendChild(createRecordRow(stats.bestRecord, true));
+      } else {
+        bestBox.hidden = true;
+      }
+    }
+
+    if (!list) {
+      return;
+    }
+
+    list.innerHTML = "";
+
+    if (stats.records.length === 0) {
+      var empty = document.createElement("p");
+      empty.className = "record-empty";
+      empty.textContent = "暂无游戏战绩";
+      list.appendChild(empty);
+      return;
+    }
+
+    for (var i = 0; i < stats.records.length; i++) {
+      list.appendChild(createRecordRow(stats.records[i], false));
+    }
+  }
+
+  /**
+   * 打开设置 / 战绩面板；若游戏正在运行则先自动暂停。
+   */
+  function openPanel(panelName) {
+    if (game.state === "running") {
+      game.pendingDirections = [];
+      game.accumulator = 0;
+      setState("paused");
+    }
+
+    closePanel();
+    updateSettingsButtons();
+    updateSpeedSection();
+
+    if (panelName === "settings" && game.ui.settingsPanel) {
+      game.ui.settingsPanel.hidden = false;
+    } else if (panelName === "records" && game.ui.recordsPanel) {
+      renderRecords();
+      game.ui.recordsPanel.hidden = false;
+    } else if (panelName === "theme" && game.ui.themePanel) {
+      updateThemeOptions();
+      game.ui.themePanel.hidden = false;
+    }
+
+    updateHintVisibility();
+  }
+
+  function closePanel() {
+    closeResetConfirm();
+
+    if (game.ui.settingsPanel) {
+      game.ui.settingsPanel.hidden = true;
+    }
+
+    if (game.ui.recordsPanel) {
+      game.ui.recordsPanel.hidden = true;
+    }
+
+    if (game.ui.themePanel) {
+      game.ui.themePanel.hidden = true;
+    }
+
+    updateHintVisibility();
+  }
+
+  function isPanelOpen() {
+    return (game.ui.settingsPanel && !game.ui.settingsPanel.hidden) ||
+      (game.ui.recordsPanel && !game.ui.recordsPanel.hidden) ||
+      (game.ui.themePanel && !game.ui.themePanel.hidden);
+  }
+
+  function openResetConfirm() {
+    if (game.ui.resetConfirmElement) {
+      game.ui.resetConfirmElement.hidden = false;
+    }
+  }
+
+  function closeResetConfirm() {
+    if (game.ui.resetConfirmElement) {
+      game.ui.resetConfirmElement.hidden = true;
+    }
+  }
+
+  /**
+   * 清空最高分与战绩数据；当前游戏进程与得分不受影响。
+   */
+  function resetStats() {
+    stats = createEmptyStats();
+
+    try {
+      window.localStorage.removeItem(STATS_STORAGE_KEY);
+    } catch (error) {
+      // 无法访问本地存储时忽略，仅影响持久化
+    }
+
+    closeResetConfirm();
+    updateHighScoreDisplay();
+    updateRoundDisplay();
+    renderRecords();
+  }
+
+  /**
+   * 手动重新开始：先按“重新开始”结算本局，再回到初始状态。
+   */
+  function restartRound() {
+    addRoundRecord(true);
+    resetGame();
+    // 从设置面板触发时顺手关掉面板，回到干净的初始界面
+    closePanel();
   }
 
   /**
@@ -194,18 +725,27 @@
     game.aiAchieved = false;
     game.aiPath = null;
     game.aiResult = null;
+    game.roundActive = false;
+    game.roundRecorded = false;
+    game.roundUsedAi = false;
+    game.roundUsedPlayer = false;
+    game.roundAiAchieved = false;
+    game.deathReason = null;
 
     updateFinalScoreDisplays();
+    updateRoundDisplay();
     updateUi();
   }
 
   /**
-   * 游戏结束：定格当前画面、写入最终分数并切到 over 状态。
+   * 游戏结束：定格当前画面、写入最终分数、记录本局战绩并切到 over 状态。
+   * reason 为 "wall"（撞墙）或 "self"（咬到自己）。
    */
-  function gameOver() {
+  function gameOver(reason) {
     game.pendingDirections = [];
     game.accumulator = 0;
     game.aiPath = null;
+    game.deathReason = reason === "self" ? "self" : "wall";
 
     // 只有“AI 开局、全程 AI 操控且尚未达成目标”的挑战才算 AI 失败；
     // 达成目标后选择“继续挑战”再死亡，按普通游戏结束处理。
@@ -214,6 +754,7 @@
       : null;
 
     updateFinalScoreDisplays();
+    addRoundRecord(false);
     setState("over");
   }
 
@@ -224,6 +765,7 @@
     game.pendingDirections = [];
     game.accumulator = 0;
     game.aiAchieved = true;
+    game.roundAiAchieved = true;
     game.aiResult = "success";
     updateFinalScoreDisplays();
     setState("ai-win");
@@ -259,6 +801,7 @@
     resetGame();
     game.mode = "ai";
     game.aiQualified = true;
+    game.roundUsedAi = true;
     game.aiProgress = 0;
     game.aiPath = null;
     game.aiResult = null;
@@ -278,8 +821,11 @@
       game.mode = "player";
       game.aiQualified = false;
       game.aiPath = null;
+      // 切换过模式即按“混合模式”记录
+      game.roundUsedPlayer = true;
     } else {
       game.mode = "ai";
+      game.roundUsedAi = true;
     }
 
     updateUi();
@@ -329,15 +875,20 @@
   }
 
   /**
-   * 暂停 / 继续切换，只在运行中与已暂停状态之间生效。
+   * 设置面板里的暂停/继续按钮：
+   * 运行中点击为暂停（面板保持打开）；暂停中点击为“继续”，
+   * 只关闭面板并保持暂停，等玩家按移动键才真正继续。
    */
-  function togglePause() {
+  function handleSettingsPauseButton() {
     if (game.state === "running") {
       game.pendingDirections = [];
       game.accumulator = 0;
       setState("paused");
-    } else if (game.state === "paused") {
-      resumeGame();
+      return;
+    }
+
+    if (game.state === "paused") {
+      closePanel();
     }
   }
 
@@ -363,6 +914,12 @@
     }
 
     game.state = nextState;
+
+    // 第一次真正进入运行状态即视为本局已开始
+    if (nextState === "running") {
+      game.roundActive = true;
+    }
+
     updateUi();
   }
 
@@ -371,11 +928,13 @@
    */
   function updateUi() {
     updateScoreDisplay();
+    updateHighScoreDisplay();
+    updateRoundDisplay();
     updateLengthDisplay();
     updateStatusDisplay();
     updateHintVisibility();
     updateOverlayVisibility();
-    updatePauseButton();
+    updateSettingsButtons();
     updateDirectionButtons();
     updateAiControls();
   }
@@ -401,28 +960,34 @@
   }
 
   /**
-   * 操作提示只在准备开始状态显示。
+   * 画布提示：准备开始显示操作说明；暂停且设置面板已关闭时提示移动继续。
    */
   function updateHintVisibility() {
-    if (!game.ui.hintElement) {
+    var hint = game.ui.hintElement;
+
+    if (!hint) {
       return;
     }
 
     if (game.state === "ready") {
-      game.ui.hintElement.classList.remove("is-hidden");
-    } else {
-      game.ui.hintElement.classList.add("is-hidden");
+      hint.textContent = READY_HINT_TEXT;
+      hint.classList.remove("is-hidden");
+      return;
     }
+
+    if (game.state === "paused" && !isPanelOpen()) {
+      hint.textContent = RESUME_HINT_TEXT;
+      hint.classList.remove("is-hidden");
+      return;
+    }
+
+    hint.classList.add("is-hidden");
   }
 
   /**
    * 暂停与结束两张遮罩卡片按状态互斥显示。
    */
   function updateOverlayVisibility() {
-    if (game.ui.pauseOverlay) {
-      game.ui.pauseOverlay.hidden = game.state !== "paused";
-    }
-
     if (game.ui.gameoverOverlay) {
       // 普通结束才显示；AI 挑战失败由专用卡片承担
       game.ui.gameoverOverlay.hidden = game.state !== "over" || game.aiResult !== null;
@@ -438,17 +1003,20 @@
   }
 
   /**
-   * 暂停按钮只在运行中与已暂停时可用，文案随状态切换。
+   * 设置面板里的暂停/继续与重新开始按钮的可用性与文案。
    */
-  function updatePauseButton() {
-    var button = game.ui.pauseButton;
+  function updateSettingsButtons() {
+    var button = game.ui.settingsPauseButton;
 
-    if (!button) {
-      return;
+    if (button) {
+      button.disabled = game.state !== "running" && game.state !== "paused";
+      button.textContent = PAUSE_BUTTON_TEXT[game.state] || "暂停";
     }
 
-    button.disabled = game.state !== "running" && game.state !== "paused";
-    button.textContent = PAUSE_BUTTON_TEXT[game.state] || "暂停";
+    if (game.ui.settingsRestartButton) {
+      // 还在准备开始状态时没有可重开的局
+      game.ui.settingsRestartButton.disabled = game.state === "ready";
+    }
   }
 
   /**
@@ -494,12 +1062,22 @@
       game.ui.aiToggleButton.setAttribute("aria-pressed", isAi ? "true" : "false");
     }
 
-    // 加速控件只在 AI 模式运行或暂停时出现
-    if (game.ui.speedControl) {
-      game.ui.speedControl.hidden = !(isAi && canToggle);
+    updateSpeedSection();
+    updateSpeedControl();
+  }
+
+  /**
+   * 加速区块只在 AI 模式运行或暂停时显示（位于设置面板内）。
+   */
+  function updateSpeedSection() {
+    if (!game.ui.speedSection) {
+      return;
     }
 
-    updateSpeedControl();
+    var isAi = game.mode === "ai";
+    var canToggle = game.state === "running" || game.state === "paused";
+
+    game.ui.speedSection.hidden = !(isAi && canToggle);
   }
 
   /**
@@ -517,22 +1095,11 @@
   }
 
   /**
-   * 同步加速按钮文案、高亮、倍率滑块与数值标签。
+   * 同步加速开关、倍率滑块与数值标签。
    */
   function updateSpeedControl() {
-    var isActive = game.speedBoost;
-
-    if (game.ui.speedButton) {
-      game.ui.speedButton.textContent = "加速 x" +
-        formatMultiplier(isActive ? game.speedMultiplier : 1);
-
-      if (isActive) {
-        game.ui.speedButton.classList.add("is-active");
-      } else {
-        game.ui.speedButton.classList.remove("is-active");
-      }
-
-      game.ui.speedButton.setAttribute("aria-pressed", isActive ? "true" : "false");
+    if (game.ui.speedSwitch) {
+      game.ui.speedSwitch.checked = game.speedBoost;
     }
 
     if (game.ui.speedValueElement) {
@@ -553,14 +1120,15 @@
   }
 
   /**
-   * 切换加速开关，只在 AI 模式下生效。
+   * 设置加速开关（由拨动开关触发），只在 AI 模式下生效。
    */
-  function toggleSpeedBoost() {
+  function setSpeedBoost(enabled) {
     if (game.mode !== "ai") {
+      updateSpeedControl();
       return;
     }
 
-    game.speedBoost = !game.speedBoost;
+    game.speedBoost = Boolean(enabled);
     resetTickPhase();
     updateSpeedControl();
   }
@@ -591,13 +1159,18 @@
     }
 
     // 游戏结束后完全禁止控制
-    if (game.state === "over") {
+    if (game.state === "over" || game.state === "ai-win") {
       return;
     }
 
-    // AI 成功冻结时同样不接受控制
-    if (game.state === "ai-win") {
-      return;
+    // 暂停中：移动键负责恢复游戏
+    if (game.state === "paused") {
+      resumeGame();
+
+      // AI 接管方向时只恢复，不应用人工方向
+      if (game.mode === "ai") {
+        return;
+      }
     }
 
     // AI 模式下由 AI 接管方向，人工方向输入完全无效
@@ -605,11 +1178,8 @@
       return;
     }
 
-    // 暂停中：任意方向输入只用于恢复游戏，不改变方向
-    if (game.state === "paused") {
-      resumeGame();
-      return;
-    }
+    // 玩家在玩家模式下操作过方向，本局模式判定会用到
+    game.roundUsedPlayer = true;
 
     // 以队列中最后一个待执行方向为基准，避免同一 tick 内连按被误判为反向
     var baseDirection = game.pendingDirections.length > 0
@@ -663,7 +1233,7 @@
     // 撞墙判定：越界即死亡，蛇头停在最后一个合法格
     if (newHead.x < 0 || newHead.x >= GRID_COUNT ||
         newHead.y < 0 || newHead.y >= GRID_COUNT) {
-      gameOver();
+      gameOver("wall");
       return;
     }
 
@@ -676,7 +1246,7 @@
 
     for (var i = 0; i < collisionCount; i++) {
       if (game.snake[i].x === newHead.x && game.snake[i].y === newHead.y) {
-        gameOver();
+        gameOver("self");
         return;
       }
     }
@@ -685,11 +1255,11 @@
 
     if (ateFood) {
       game.foodEaten += 1;
-      game.score += calculateFoodScore(game.foodEaten);
+      // 新记分制：得分 += 基础分值 × 吃到食物后的长度
+      applyScore(calculateFoodScore(game.snake.length));
 
       // 基于增长后的蛇身重新生成食物，保证不会落在蛇身上
       game.food = createFood();
-      updateScoreDisplay();
       updateLengthDisplay();
 
       if (game.mode === "ai") {
@@ -986,16 +1556,31 @@
       return;
     }
 
+    var key = event.key ? event.key.toLowerCase() : "";
+
+    // 空格键：打开 / 关闭设置面板；焦点在加速开关上时交给开关自身切换
+    if (event.code === "Space" || key === " " || key === "spacebar") {
+      if (event.target === game.ui.speedSwitch) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (isPanelOpen()) {
+        closePanel();
+      } else {
+        openPanel("settings");
+      }
+
+      return;
+    }
+
     if (isFormControl(event.target)) {
       return;
     }
 
-    var key = event.key ? event.key.toLowerCase() : "";
-
-    // 空格键：暂停 / 继续
-    if (event.code === "Space" || key === " " || key === "spacebar") {
-      event.preventDefault();
-      togglePause();
+    // 面板打开时不做游戏控制（面板内有自己的按钮）
+    if (isPanelOpen()) {
       return;
     }
 
@@ -1025,7 +1610,22 @@
   }
 
   /**
-   * 绑定键盘、屏幕方向按钮与暂停/重新开始按钮。
+   * 点击遮罩空白处触发关闭；点击卡片内部不会触发。
+   */
+  function bindBackdropClick(element, handler) {
+    if (!element) {
+      return;
+    }
+
+    element.addEventListener("click", function (event) {
+      if (event.target === element) {
+        handler();
+      }
+    });
+  }
+
+  /**
+   * 绑定键盘、屏幕方向按钮、面板与各类按钮。
    */
   function bindEvents() {
     document.addEventListener("keydown", handleKeyDown);
@@ -1042,22 +1642,50 @@
       })(buttons[i]);
     }
 
-    bindClick(game.ui.pauseButton, togglePause);
-    bindClick(game.ui.resumeButton, resumeGame);
-    bindClick(game.ui.pauseRestartButton, resetGame);
-    bindClick(game.ui.gameoverRestartButton, resetGame);
+    bindClick(game.ui.settingsButton, function () {
+      openPanel("settings");
+    });
+    bindClick(game.ui.settingsCloseButton, closePanel);
+    bindClick(game.ui.settingsPauseButton, handleSettingsPauseButton);
+    bindClick(game.ui.settingsRestartButton, restartRound);
+    bindClick(game.ui.settingsRecordsButton, function () {
+      openPanel("records");
+    });
+    bindClick(game.ui.settingsThemeButton, function () {
+      openPanel("theme");
+    });
+    bindClick(game.ui.themeCloseButton, closePanel);
+    bindClick(game.ui.recordsCloseButton, closePanel);
+    bindClick(game.ui.recordsResetButton, openResetConfirm);
+    bindClick(game.ui.resetCancelButton, closeResetConfirm);
+    bindClick(game.ui.resetConfirmButton, resetStats);
+
+    bindClick(game.ui.gameoverRestartButton, restartRound);
     bindClick(game.ui.aiStartButton, startAiChallenge);
     bindClick(game.ui.aiToggleButton, toggleAiMode);
     bindClick(game.ui.aiContinueButton, continueAiChallenge);
-    bindClick(game.ui.aiWinRestartButton, resetGame);
-    bindClick(game.ui.aiFailRestartButton, resetGame);
-    bindClick(game.ui.speedButton, toggleSpeedBoost);
+    bindClick(game.ui.aiWinRestartButton, restartRound);
+    bindClick(game.ui.aiFailRestartButton, restartRound);
+    if (game.ui.speedSwitch) {
+      game.ui.speedSwitch.addEventListener("change", function () {
+        setSpeedBoost(game.ui.speedSwitch.checked);
+        // 用指针或键盘切换后主动失焦，避免空格键被开关吃掉
+        game.ui.speedSwitch.blur();
+      });
+    }
 
     if (game.ui.speedRange) {
       game.ui.speedRange.addEventListener("input", function () {
         setSpeedMultiplier(game.ui.speedRange.value);
       });
     }
+
+    bindBackdropClick(game.ui.settingsPanel, closePanel);
+    bindBackdropClick(game.ui.recordsPanel, closePanel);
+    bindBackdropClick(game.ui.themePanel, closePanel);
+    bindBackdropClick(game.ui.resetConfirmElement, closeResetConfirm);
+
+    bindThemeOptions();
   }
 
   /**
@@ -1090,6 +1718,13 @@
               })
             : null,
           aiResult: game.aiResult,
+          highScore: stats.highScore,
+          roundNumber: getRoundNumber(),
+          completedRounds: stats.completedRounds,
+          recordsCount: stats.records.length,
+          roundMode: getRoundMode(),
+          roundRecorded: game.roundRecorded,
+          theme: game.theme,
           speedMultiplier: game.speedMultiplier,
           speedBoost: game.speedBoost,
           speedMax: MAX_SPEED_MULTIPLIER,
@@ -1100,8 +1735,8 @@
       },
 
       // 仅供自动化测试使用的钩子，正常玩法不会调用
-      forceGameOver: function () {
-        gameOver();
+      forceGameOver: function (reason) {
+        gameOver(reason === "self" ? "self" : "wall");
       }
     };
   }
@@ -1130,14 +1765,19 @@
     game.canvas = canvas;
     game.ctx = ctx;
     game.ui.scoreElement = document.getElementById("score-value");
+    game.ui.highScoreElement = document.getElementById("highscore-value");
+    game.ui.roundElement = document.getElementById("round-value");
     game.ui.lengthElement = document.getElementById("length-value");
     game.ui.statusElement = document.getElementById("status-value");
     game.ui.hintElement = document.getElementById("game-hint");
-    game.ui.pauseButton = document.getElementById("pause-btn");
-    game.ui.resumeButton = document.getElementById("resume-btn");
-    game.ui.pauseRestartButton = document.getElementById("pause-restart-btn");
+    game.ui.settingsButton = document.getElementById("settings-btn");
+    game.ui.settingsPanel = document.getElementById("settings-panel");
+    game.ui.settingsCloseButton = document.getElementById("settings-close");
+    game.ui.settingsPauseButton = document.getElementById("settings-pause-btn");
+    game.ui.settingsRestartButton = document.getElementById("settings-restart-btn");
+    game.ui.settingsRecordsButton = document.getElementById("settings-records-btn");
+    game.ui.settingsThemeButton = document.getElementById("settings-theme-btn");
     game.ui.gameoverRestartButton = document.getElementById("gameover-restart-btn");
-    game.ui.pauseOverlay = document.getElementById("pause-overlay");
     game.ui.gameoverOverlay = document.getElementById("gameover-overlay");
     game.ui.finalScoreElement = document.getElementById("final-score-value");
     game.ui.aiProgressElement = document.getElementById("ai-progress");
@@ -1150,33 +1790,54 @@
     game.ui.aiContinueButton = document.getElementById("ai-continue-btn");
     game.ui.aiWinRestartButton = document.getElementById("aiwin-restart-btn");
     game.ui.aiFailRestartButton = document.getElementById("aifail-restart-btn");
-    game.ui.speedControl = document.getElementById("speed-control");
-    game.ui.speedButton = document.getElementById("speed-btn");
+    game.ui.speedSection = document.getElementById("speed-section");
+    game.ui.speedSwitch = document.getElementById("speed-switch");
     game.ui.speedRange = document.getElementById("speed-range");
     game.ui.speedValueElement = document.getElementById("speed-value");
+    game.ui.recordsPanel = document.getElementById("records-panel");
+    game.ui.recordsCloseButton = document.getElementById("records-close");
+    game.ui.recordsListElement = document.getElementById("records-list");
+    game.ui.bestRecordElement = document.getElementById("best-record");
+    game.ui.recordsResetButton = document.getElementById("records-reset-btn");
+    game.ui.resetConfirmElement = document.getElementById("reset-confirm");
+    game.ui.resetConfirmButton = document.getElementById("reset-confirm-btn");
+    game.ui.resetCancelButton = document.getElementById("reset-cancel-btn");
+    game.ui.themePanel = document.getElementById("theme-panel");
+    game.ui.themeCloseButton = document.getElementById("theme-close");
 
     if (!game.ui.scoreElement || !game.ui.lengthElement || !game.ui.statusElement) {
       console.error("[贪吃蛇] 未找到 HUD 元素（#score-value / #length-value / #status-value）。");
     }
 
-    if (!game.ui.pauseOverlay || !game.ui.gameoverOverlay) {
-      console.error("[贪吃蛇] 未找到遮罩卡片（#pause-overlay / #gameover-overlay）。");
+    if (!game.ui.gameoverOverlay) {
+      console.error("[贪吃蛇] 未找到结束卡片（#gameover-overlay）。");
     }
 
     if (!window.SnakeAI) {
       console.error("[贪吃蛇] 未加载 ai.js，AI 模式不可用。");
     }
 
-    if (!game.ui.speedControl || !game.ui.speedRange) {
-      console.error("[贪吃蛇] 未找到加速控件（#speed-control / #speed-range）。");
+    if (!game.ui.speedSection || !game.ui.speedRange) {
+      console.error("[贪吃蛇] 未找到加速控件（#speed-section / #speed-range）。");
     }
 
+    if (!game.ui.settingsPanel || !game.ui.recordsPanel) {
+      console.error("[贪吃蛇] 未找到设置或战绩面板（#settings-panel / #records-panel）。");
+    }
+
+    if (!game.ui.themePanel) {
+      console.error("[贪吃蛇] 未找到主题面板（#theme-panel）。");
+    }
+
+    loadTheme();
+    loadStats();
     resetGame();
     bindEvents();
     exposeDebugApi();
     draw();
     startLoop();
 
+    renderRecords();
     console.log("[贪吃蛇] 初始化完成，等待方向输入。");
   }
 

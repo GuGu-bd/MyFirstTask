@@ -3,8 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b1219">
   <title>贪吃蛇</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    // 首屏防闪：在样式生效前先按 localStorage 里的主题设置 data-theme
+    (function () {
+      try {
+        var savedTheme = window.localStorage.getItem("snake.theme.v1");
+
+        if (savedTheme === "dark" || savedTheme === "light" || savedTheme === "pink") {
+          document.documentElement.setAttribute("data-theme", savedTheme);
+        }
+      } catch (error) {
+        // 读取失败时保持默认深色
+      }
+    })();
+  </script>
 </head>
 <body>
   <main class="game-wrapper">
@@ -13,28 +28,15 @@
     <div class="hud">
       <div class="hud-stats">
         <span class="hud-item">得分 <span class="hud-value" id="score-value">0</span></span>
+        <span class="hud-item">历史最高分 <span class="hud-value" id="highscore-value">0</span></span>
+        <span class="hud-item">局数 <span class="hud-value" id="round-value">1</span></span>
         <span class="hud-item">长度 <span class="hud-value" id="length-value">3</span></span>
         <span class="hud-item">状态 <span class="hud-value" id="status-value">准备开始</span></span>
       </div>
       <div class="hud-actions">
         <span class="ai-progress" id="ai-progress" hidden>AI 进度 0 / 15</span>
-        <div class="speed-control" id="speed-control" hidden>
-          <button type="button" class="ui-btn ui-btn--ghost" id="speed-btn" aria-pressed="false" aria-haspopup="true">加速 x1</button>
-          <div class="speed-popover" id="speed-popover">
-            <div class="speed-bubble" id="speed-bubble" role="group" aria-label="加速倍率">
-              <span class="speed-bubble-title">加速倍率</span>
-              <input type="range" class="speed-range" id="speed-range" min="1" max="10" step="1" value="1" aria-label="AI 加速倍率">
-              <div class="speed-range-ticks" aria-hidden="true">
-                <span class="speed-tick speed-tick--start">1</span>
-                <span class="speed-tick speed-tick--mid">5</span>
-                <span class="speed-tick speed-tick--end">10</span>
-              </div>
-              <span class="speed-bubble-value" id="speed-value">1x</span>
-            </div>
-          </div>
-        </div>
         <button type="button" class="ui-btn ui-btn--primary" id="ai-start-btn">AI自动游玩</button>
-        <button type="button" class="ui-btn ui-btn--ghost" id="pause-btn" disabled>暂停</button>
+        <button type="button" class="ui-btn ui-btn--ghost" id="settings-btn">设置</button>
       </div>
     </div>
 
@@ -43,17 +45,6 @@
         你的浏览器不支持 Canvas，请更换现代浏览器后再试。
       </canvas>
       <p class="game-hint" id="game-hint">可通过 WASD、方向键、下方按钮 开始/控制</p>
-
-      <div class="overlay" id="pause-overlay" hidden>
-        <div class="overlay-card">
-          <h2 class="overlay-title">已暂停</h2>
-          <p class="overlay-text">点击按钮或者移动以继续游戏</p>
-          <div class="overlay-actions">
-            <button type="button" class="ui-btn ui-btn--primary" id="resume-btn">继续游戏</button>
-            <button type="button" class="ui-btn ui-btn--ghost" id="pause-restart-btn">重新开始</button>
-          </div>
-        </div>
-      </div>
 
       <div class="overlay" id="gameover-overlay" hidden>
         <div class="overlay-card">
@@ -95,7 +86,119 @@
       <button type="button" class="control-btn control-btn--right" data-direction="right" aria-label="向右">→</button>
     </div>
 
-    <p class="controls-tip">空格键：暂停 / 继续 · AI 模式下由 AI 自动控制</p>
+    <p class="controls-tip">空格键：打开/关闭设置 · AI 模式下由 AI 自动控制</p>
+
+    <div class="panel" id="settings-panel" hidden>
+      <div class="panel-card">
+        <button type="button" class="panel-close" id="settings-close" aria-label="关闭设置">×</button>
+        <h2 class="panel-title">设置</h2>
+
+        <div class="panel-section panel-row">
+          <button type="button" class="ui-btn ui-btn--primary" id="settings-pause-btn" disabled>暂停</button>
+          <button type="button" class="ui-btn ui-btn--ghost" id="settings-restart-btn" disabled>重新开始</button>
+        </div>
+
+        <div class="panel-section speed-section" id="speed-section" hidden>
+          <div class="speed-row">
+            <span class="speed-label">加速模式</span>
+            <input type="checkbox" class="switch" id="speed-switch" role="switch" aria-label="加速模式开关">
+          </div>
+          <input type="range" class="speed-range" id="speed-range" min="1" max="10" step="1" value="1" aria-label="AI 加速倍率">
+          <div class="speed-range-ticks" aria-hidden="true">
+            <span class="speed-tick speed-tick--start">1</span>
+            <span class="speed-tick speed-tick--mid">5</span>
+            <span class="speed-tick speed-tick--end">10</span>
+          </div>
+          <span class="speed-value" id="speed-value">1x</span>
+        </div>
+
+        <div class="panel-section panel-row">
+          <button type="button" class="ui-btn ui-btn--ghost" id="settings-theme-btn">主题</button>
+          <button type="button" class="ui-btn ui-btn--ghost" id="settings-records-btn">多局战绩</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="records-panel" hidden>
+      <div class="panel-card panel-card--wide">
+        <button type="button" class="panel-close" id="records-close" aria-label="关闭战绩">×</button>
+        <h2 class="panel-title">多局战绩</h2>
+
+        <div class="record-best" id="best-record" hidden></div>
+        <div class="record-list" id="records-list"></div>
+
+        <div class="panel-actions">
+          <button type="button" class="ui-btn ui-btn--danger" id="records-reset-btn">重置</button>
+        </div>
+
+        <div class="confirm" id="reset-confirm" hidden>
+          <div class="confirm-card">
+            <p class="confirm-text">确定要清空所有历史战绩和最高分吗？此操作不可恢复</p>
+            <div class="confirm-actions">
+              <button type="button" class="ui-btn ui-btn--ghost" id="reset-cancel-btn">取消</button>
+              <button type="button" class="ui-btn ui-btn--danger" id="reset-confirm-btn">确认</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="theme-panel" hidden>
+      <div class="panel-card">
+        <button type="button" class="panel-close" id="theme-close" aria-label="关闭主题">×</button>
+        <h2 class="panel-title">主题</h2>
+
+        <div class="theme-list">
+          <button type="button" class="theme-option" data-theme-option="dark">
+            <span class="theme-preview theme-preview--dark" aria-hidden="true">
+              <span class="preview-snake">
+                <span class="preview-cell preview-cell--head"></span>
+                <span class="preview-cell preview-cell--body"></span>
+                <span class="preview-cell preview-cell--tail"></span>
+              </span>
+              <span class="preview-food"></span>
+              <span class="preview-path"></span>
+            </span>
+            <span class="theme-option-head">
+              <span class="theme-option-name">深色（默认）</span>
+              <span class="theme-option-state" hidden>使用中</span>
+            </span>
+          </button>
+
+          <button type="button" class="theme-option" data-theme-option="light">
+            <span class="theme-preview theme-preview--light" aria-hidden="true">
+              <span class="preview-snake">
+                <span class="preview-cell preview-cell--head"></span>
+                <span class="preview-cell preview-cell--body"></span>
+                <span class="preview-cell preview-cell--tail"></span>
+              </span>
+              <span class="preview-food"></span>
+              <span class="preview-path"></span>
+            </span>
+            <span class="theme-option-head">
+              <span class="theme-option-name">浅色</span>
+              <span class="theme-option-state" hidden>使用中</span>
+            </span>
+          </button>
+
+          <button type="button" class="theme-option" data-theme-option="pink">
+            <span class="theme-preview theme-preview--pink" aria-hidden="true">
+              <span class="preview-snake">
+                <span class="preview-cell preview-cell--head"></span>
+                <span class="preview-cell preview-cell--body"></span>
+                <span class="preview-cell preview-cell--tail"></span>
+              </span>
+              <span class="preview-food"></span>
+              <span class="preview-path"></span>
+            </span>
+            <span class="theme-option-head">
+              <span class="theme-option-name">粉色</span>
+              <span class="theme-option-state" hidden>使用中</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
 
   </main>
 
