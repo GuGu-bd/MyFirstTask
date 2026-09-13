@@ -136,6 +136,62 @@ color:#00aeef;
 
 
 
+/* =========================
+   标题右侧的游戏入口
+========================= */
+
+
+.brand{
+
+display:flex;
+
+align-items:center;
+
+gap:18px;
+
+}
+
+
+
+.game-entry{
+
+display:inline-flex;
+
+align-items:center;
+
+padding:6px 16px;
+
+font-size:15px;
+
+line-height:1.4;
+
+color:#66d9ff;
+
+border:1px solid rgba(0,174,239,.6);
+
+border-radius:40px;
+
+text-decoration:none;
+
+white-space:nowrap;
+
+transition:.35s;
+
+}
+
+
+
+.game-entry:hover{
+
+color:#ffffff;
+
+background:rgba(0,174,239,.15);
+
+box-shadow:0 0 18px rgba(0,174,239,.55);
+
+}
+
+
 nav ul{
 
 
@@ -1114,6 +1170,28 @@ display:none;
 
 
 }
+
+
+
+
+
+.brand{
+
+gap:12px;
+
+}
+
+
+
+.game-entry{
+
+padding:4px 12px;
+
+font-size:13px;
+
+}
+
+
 
 
 
