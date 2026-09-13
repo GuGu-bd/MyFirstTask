@@ -5,7 +5,7 @@
 - 个人主页（GitHub Pages）：https://github.com/GuGu-bd/MyFirstTask
 - 个人简介 PDF：https://github.com/GuGu-bd/MyFirstTask/blob/main/profile/%E4%B8%AA%E4%BA%BA%E7%AE%80%E4%BB%8B.pdf
 - 部署的pages地址：https://gugu-bd.github.io/MyFirstTask/
-- 贪吃蛇游戏：
+- 贪吃蛇游戏：https://github.com/GuGu-bd/MyFirstTask/blob/main/game/snake/snake.html(由文件夹中其他文件整合成的单html文件)
 
 ## 一、仓库结构
 
