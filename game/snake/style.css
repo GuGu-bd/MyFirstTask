@@ -40,6 +40,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hud-stats {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
   font-size: 16px;
   letter-spacing: 1px;
 }
@@ -95,6 +104,113 @@ body {
   }
 }
 
+/* ===== 暂停 / 结束遮罩卡片 ===== */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  border-radius: 8px;
+  background-color: rgba(6, 12, 18, 0.72);
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+.overlay-card {
+  width: 100%;
+  max-width: 320px;
+  padding: 24px 22px;
+  text-align: center;
+  border: 1px solid #3d6b7d;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #1a2a35 0%, #101a24 100%);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
+.overlay-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 3px;
+}
+
+.overlay-text {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #9fb3bd;
+}
+
+.overlay-score {
+  font-size: 22px;
+  font-weight: 700;
+  color: #86efac;
+}
+
+.overlay-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+/* ===== 通用按钮 ===== */
+.ui-btn {
+  padding: 10px 18px;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1;
+  color: #cfe6ee;
+  border: 1px solid #3d6b7d;
+  border-radius: 10px;
+  background-color: #16222c;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+}
+
+.ui-btn:hover:not(:disabled) {
+  background-color: #1f3b4d;
+  border-color: #4f8497;
+}
+
+.ui-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.ui-btn:focus-visible {
+  outline: 2px solid #86efac;
+  outline-offset: 2px;
+}
+
+.ui-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ui-btn--primary {
+  font-weight: 600;
+  color: #06281d;
+  border-color: #34d399;
+  background-color: #34d399;
+  box-shadow: 0 6px 16px rgba(52, 211, 153, 0.25);
+}
+
+.ui-btn--primary:hover:not(:disabled) {
+  background-color: #6ee7b7;
+  border-color: #6ee7b7;
+}
+
+.ui-btn--ghost {
+  background-color: rgba(22, 34, 44, 0.9);
+}
+
 /* ===== 屏幕方向按钮 ===== */
 .controls {
   display: grid;
@@ -135,6 +251,22 @@ body {
 .control-btn:focus-visible {
   outline: 2px solid #86efac;
   outline-offset: 2px;
+}
+
+.control-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.control-btn:disabled:hover {
+  background-color: #16222c;
+  border-color: #3d6b7d;
+}
+
+.controls-tip {
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: #7f939d;
 }
 
 .control-btn--up {

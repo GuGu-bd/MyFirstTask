@@ -11,8 +11,12 @@
     <h1 class="game-title">贪吃蛇</h1>
 
     <div class="hud">
-      <span class="hud-item">得分：<span class="hud-value" id="score-value">0</span></span>
-      <span class="hud-item">状态：<span class="hud-value" id="status-value">准备开始</span></span>
+      <div class="hud-stats">
+        <span class="hud-item">得分 <span class="hud-value" id="score-value">0</span></span>
+        <span class="hud-item">长度 <span class="hud-value" id="length-value">3</span></span>
+        <span class="hud-item">状态 <span class="hud-value" id="status-value">准备开始</span></span>
+      </div>
+      <button type="button" class="ui-btn ui-btn--ghost" id="pause-btn" disabled>暂停</button>
     </div>
 
     <div class="canvas-stage">
@@ -20,6 +24,27 @@
         你的浏览器不支持 Canvas，请更换现代浏览器后再试。
       </canvas>
       <p class="game-hint" id="game-hint">可通过 WASD、方向键、下方按钮 开始/控制</p>
+
+      <div class="overlay" id="pause-overlay" hidden>
+        <div class="overlay-card">
+          <h2 class="overlay-title">已暂停</h2>
+          <p class="overlay-text">点击按钮或者移动以继续游戏</p>
+          <div class="overlay-actions">
+            <button type="button" class="ui-btn ui-btn--primary" id="resume-btn">继续游戏</button>
+            <button type="button" class="ui-btn ui-btn--ghost" id="pause-restart-btn">重新开始</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay" id="gameover-overlay" hidden>
+        <div class="overlay-card">
+          <h2 class="overlay-title">游戏结束</h2>
+          <p class="overlay-text">最终分数：<span class="overlay-score" id="final-score-value">0</span></p>
+          <div class="overlay-actions">
+            <button type="button" class="ui-btn ui-btn--primary" id="gameover-restart-btn">重新开始</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="controls" role="group" aria-label="方向控制">
@@ -28,6 +53,8 @@
       <button type="button" class="control-btn control-btn--down" data-direction="down" aria-label="向下">↓</button>
       <button type="button" class="control-btn control-btn--right" data-direction="right" aria-label="向右">→</button>
     </div>
+
+    <p class="controls-tip">空格键：暂停 / 继续</p>
 
   </main>
 

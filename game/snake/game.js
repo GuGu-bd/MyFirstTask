@@ -1,10 +1,9 @@
 /**
  * 贪吃蛇 - 入口文件
  *
- * 第三阶段：食物与得分系统。
+ * v1.0：死亡机制（撞墙与自碰）、暂停与继续、重新开始与 UI 完善。
  * Canvas 只负责绘制游戏内容（背景、网格、食物、蛇），
- * 分数、状态与操作提示由 HTML 负责。
- * 自身碰撞、边界结束、最高分与重开留到后续阶段实现。
+ * 分数、长度、状态、按钮与遮罩卡片全部由 HTML 负责。
  */
 (function () {
   "use strict";
@@ -24,7 +23,15 @@
   // HUD 状态文案
   var STATUS_TEXT = {
     ready: "准备开始",
-    running: "进行中"
+    running: "进行中",
+    paused: "已暂停",
+    over: "游戏结束"
+  };
+
+  // 暂停按钮文案
+  var PAUSE_BUTTON_TEXT = {
+    running: "暂停",
+    paused: "继续游戏"
   };
 
   // 颜色与后续替换贴图相关的配置集中在这里
@@ -69,7 +76,7 @@
   var game = {
     canvas: null,
     ctx: null,
-    state: "ready",          // "ready"（静止等待开始） | "running"（按 tick 移动）
+    state: "ready",          // "ready" | "running" | "paused" | "over"
     direction: "right",      // 当前生效方向
     pendingDirections: [],   // 待执行方向队列，每个 tick 消费一个
     snake: [],               // 蛇身坐标，索引 0 为蛇头
@@ -80,8 +87,16 @@
     lastFrameTime: null,     // 上一帧时间戳
     ui: {                    // HTML 层元素，缺失时只记录错误、不中断游戏
       scoreElement: null,
+      lengthElement: null,
       statusElement: null,
-      hintElement: null
+      hintElement: null,
+      pauseButton: null,
+      resumeButton: null,
+      pauseRestartButton: null,
+      gameoverRestartButton: null,
+      pauseOverlay: null,
+      gameoverOverlay: null,
+      finalScoreElement: null
     }
   };
 
@@ -132,7 +147,7 @@
   }
 
   /**
-   * 重置到初始状态（本阶段只在初始化时调用）。
+   * 重置到初始状态，可重复调用（初始化与“重新开始”共用）。
    */
   function resetGame() {
     game.snake = createInitialSnake();
@@ -143,13 +158,57 @@
     game.foodEaten = 0;
     game.score = 0;
     game.food = createFood();
-    updateScoreDisplay();
-    updateStatusDisplay();
-    updateHintVisibility();
+
+    // 清掉上一局写在结束卡片里的最终分数
+    if (game.ui.finalScoreElement) {
+      game.ui.finalScoreElement.textContent = "0";
+    }
+
+    updateUi();
   }
 
   /**
-   * 统一切换游戏状态，并同步 HUD 文案与操作提示的显示。
+   * 游戏结束：定格当前画面、写入最终分数并切到 over 状态。
+   */
+  function gameOver() {
+    game.pendingDirections = [];
+    game.accumulator = 0;
+
+    if (game.ui.finalScoreElement) {
+      game.ui.finalScoreElement.textContent = String(game.score);
+    }
+
+    setState("over");
+  }
+
+  /**
+   * 暂停 / 继续切换，只在运行中与已暂停状态之间生效。
+   */
+  function togglePause() {
+    if (game.state === "running") {
+      game.pendingDirections = [];
+      game.accumulator = 0;
+      setState("paused");
+    } else if (game.state === "paused") {
+      resumeGame();
+    }
+  }
+
+  /**
+   * 恢复游戏：只把状态切回运行中，不改变当前方向。
+   */
+  function resumeGame() {
+    if (game.state !== "paused") {
+      return;
+    }
+
+    game.pendingDirections = [];
+    game.accumulator = 0;
+    setState("running");
+  }
+
+  /**
+   * 统一切换游戏状态，并同步所有 HTML UI。
    */
   function setState(nextState) {
     if (game.state === nextState) {
@@ -157,13 +216,31 @@
     }
 
     game.state = nextState;
+    updateUi();
+  }
+
+  /**
+   * 统一的 UI 刷新入口：HUD、提示、遮罩卡片与按钮状态。
+   */
+  function updateUi() {
+    updateScoreDisplay();
+    updateLengthDisplay();
     updateStatusDisplay();
     updateHintVisibility();
+    updateOverlayVisibility();
+    updatePauseButton();
+    updateDirectionButtons();
   }
 
   function updateScoreDisplay() {
     if (game.ui.scoreElement) {
       game.ui.scoreElement.textContent = String(game.score);
+    }
+  }
+
+  function updateLengthDisplay() {
+    if (game.ui.lengthElement) {
+      game.ui.lengthElement.textContent = String(game.snake.length);
     }
   }
 
@@ -174,7 +251,7 @@
   }
 
   /**
-   * 开始前显示操作提示，游戏开始后隐藏。
+   * 操作提示只在准备开始状态显示。
    */
   function updateHintVisibility() {
     if (!game.ui.hintElement) {
@@ -189,11 +266,61 @@
   }
 
   /**
+   * 暂停与结束两张遮罩卡片按状态互斥显示。
+   */
+  function updateOverlayVisibility() {
+    if (game.ui.pauseOverlay) {
+      game.ui.pauseOverlay.hidden = game.state !== "paused";
+    }
+
+    if (game.ui.gameoverOverlay) {
+      game.ui.gameoverOverlay.hidden = game.state !== "over";
+    }
+  }
+
+  /**
+   * 暂停按钮只在运行中与已暂停时可用，文案随状态切换。
+   */
+  function updatePauseButton() {
+    var button = game.ui.pauseButton;
+
+    if (!button) {
+      return;
+    }
+
+    button.disabled = game.state !== "running" && game.state !== "paused";
+    button.textContent = PAUSE_BUTTON_TEXT[game.state] || "暂停";
+  }
+
+  /**
+   * 游戏结束后禁用屏幕方向按钮。
+   */
+  function updateDirectionButtons() {
+    var buttons = document.querySelectorAll("[data-direction]");
+    var disabled = game.state === "over";
+
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].disabled = disabled;
+    }
+  }
+
+  /**
    * 唯一的转向入口：键盘与屏幕按钮都调用它。
    * 反向输入始终忽略；同方向按键在运动中是空操作，在静止时用来启动游戏。
    */
   function setDirection(directionName) {
     if (!DIRECTIONS[directionName]) {
+      return;
+    }
+
+    // 游戏结束后完全禁止控制
+    if (game.state === "over") {
+      return;
+    }
+
+    // 暂停中：任意方向输入只用于恢复游戏，不改变方向
+    if (game.state === "paused") {
+      resumeGame();
       return;
     }
 
@@ -228,7 +355,7 @@
   }
 
   /**
-   * 前进一格：消费一个待执行方向，生成新蛇头。
+   * 前进一格：消费一个待执行方向，先做撞墙与自碰判定，再移动。
    * 吃到食物时蛇尾不弹出（蛇身 +1 节）并加分、重新生成食物；
    * 否则头进尾出，长度保持不变。
    */
@@ -242,16 +369,28 @@
 
     var delta = DIRECTIONS[game.direction];
     var head = game.snake[0];
+    var newHead = { x: head.x + delta.x, y: head.y + delta.y };
 
-    // 穿墙：坐标在 0 ~ GRID_COUNT - 1 之间循环
-    var newHead = {
-      x: (head.x + delta.x + GRID_COUNT) % GRID_COUNT,
-      y: (head.y + delta.y + GRID_COUNT) % GRID_COUNT
-    };
+    // 撞墙判定：越界即死亡，蛇头停在最后一个合法格
+    if (newHead.x < 0 || newHead.x >= GRID_COUNT ||
+        newHead.y < 0 || newHead.y >= GRID_COUNT) {
+      gameOver();
+      return;
+    }
 
     var ateFood = game.food !== null &&
       newHead.x === game.food.x &&
       newHead.y === game.food.y;
+
+    // 自碰判定：不吃食物时尾节会在本 tick 移开，因此排除尾节（允许追尾）
+    var collisionCount = ateFood ? game.snake.length : game.snake.length - 1;
+
+    for (var i = 0; i < collisionCount; i++) {
+      if (game.snake[i].x === newHead.x && game.snake[i].y === newHead.y) {
+        gameOver();
+        return;
+      }
+    }
 
     game.snake.unshift(newHead);
 
@@ -262,6 +401,7 @@
       // 基于增长后的蛇身重新生成食物，保证不会落在蛇身上
       game.food = createFood();
       updateScoreDisplay();
+      updateLengthDisplay();
     } else {
       game.snake.pop();
     }
@@ -404,6 +544,12 @@
       while (game.accumulator >= TICK_MS) {
         update();
         game.accumulator -= TICK_MS;
+
+        // 死亡后立即停止本次循环内继续推进
+        if (game.state !== "running") {
+          game.accumulator = 0;
+          break;
+        }
       }
     } else {
       game.accumulator = 0;
@@ -427,6 +573,14 @@
     }
 
     var key = event.key ? event.key.toLowerCase() : "";
+
+    // 空格键：暂停 / 继续
+    if (event.code === "Space" || key === " " || key === "spacebar") {
+      event.preventDefault();
+      togglePause();
+      return;
+    }
+
     var directionName = KEY_DIRECTION_MAP[key];
 
     if (!directionName) {
@@ -438,7 +592,22 @@
   }
 
   /**
-   * 绑定键盘与屏幕方向按钮。
+   * 给按钮绑定点击事件，点击后主动失焦，
+   * 避免按钮保持焦点后空格键既触发暂停又重复激活按钮。
+   */
+  function bindClick(element, handler) {
+    if (!element) {
+      return;
+    }
+
+    element.addEventListener("click", function () {
+      handler();
+      element.blur();
+    });
+  }
+
+  /**
+   * 绑定键盘、屏幕方向按钮与暂停/重新开始按钮。
    */
   function bindEvents() {
     document.addEventListener("keydown", handleKeyDown);
@@ -449,13 +618,16 @@
       (function (button) {
         var directionName = button.getAttribute("data-direction");
 
-        button.addEventListener("click", function () {
+        bindClick(button, function () {
           setDirection(directionName);
-          // 主动失焦，避免按钮保持焦点后空格键重复触发转向
-          button.blur();
         });
       })(buttons[i]);
     }
+
+    bindClick(game.ui.pauseButton, togglePause);
+    bindClick(game.ui.resumeButton, resumeGame);
+    bindClick(game.ui.pauseRestartButton, resetGame);
+    bindClick(game.ui.gameoverRestartButton, resetGame);
   }
 
   /**
@@ -507,11 +679,23 @@
     game.canvas = canvas;
     game.ctx = ctx;
     game.ui.scoreElement = document.getElementById("score-value");
+    game.ui.lengthElement = document.getElementById("length-value");
     game.ui.statusElement = document.getElementById("status-value");
     game.ui.hintElement = document.getElementById("game-hint");
+    game.ui.pauseButton = document.getElementById("pause-btn");
+    game.ui.resumeButton = document.getElementById("resume-btn");
+    game.ui.pauseRestartButton = document.getElementById("pause-restart-btn");
+    game.ui.gameoverRestartButton = document.getElementById("gameover-restart-btn");
+    game.ui.pauseOverlay = document.getElementById("pause-overlay");
+    game.ui.gameoverOverlay = document.getElementById("gameover-overlay");
+    game.ui.finalScoreElement = document.getElementById("final-score-value");
 
-    if (!game.ui.scoreElement || !game.ui.statusElement) {
-      console.error("[贪吃蛇] 未找到 HUD 元素（#score-value / #status-value）。");
+    if (!game.ui.scoreElement || !game.ui.lengthElement || !game.ui.statusElement) {
+      console.error("[贪吃蛇] 未找到 HUD 元素（#score-value / #length-value / #status-value）。");
+    }
+
+    if (!game.ui.pauseOverlay || !game.ui.gameoverOverlay) {
+      console.error("[贪吃蛇] 未找到遮罩卡片（#pause-overlay / #gameover-overlay）。");
     }
 
     resetGame();
